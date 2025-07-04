@@ -1,0 +1,26 @@
+---
+- hosts: tag_Name_Database
+  become: yes
+  vars_files:
+    - group_vars/tag_Name_Database.yml
+  gather_facts: no
+  environment:
+    dbHost: "{{db_ip}}"
+    dbUser: "{{ dbuser }}"
+    dbPassword:  "{{ dbpassword }}" 
+    dbName: "{{ dbname }}"
+  roles:
+    - common
+    - database
+- hosts:  tag_Name_WEB_APP
+  become: yes
+  vars_files:
+    - group_vars/tag_Name_WEB_APP.yml
+  environment:
+    dbHost: "{{db_ip}}"
+    dbUser: "{{ dbuser }}"
+    dbPassword: "{{ dbpassword }}" 
+    dbName: "{{ dbname }}"
+  roles:
+    - common
+    - web_app

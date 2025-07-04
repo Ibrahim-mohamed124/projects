@@ -1,0 +1,165 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars_files:
+    - inputs.yml
+  tasks:
+   - name: create a VPC to host the web, app and database tiers
+     amazon.aws.ec2_vpc_net:
+       cidr_block: "{{ VPC_CIDR_BLOCK }}"
+       region: "{{ REGION }}"
+       name: KK_EC_APP_VPC
+       tags:
+         Name: KK_EC_APP_VPC
+     register: vpc_data
+   - name: Create subnet for web,app and database tiers
+     amazon.aws.ec2_vpc_subnet:
+       state: present
+       vpc_id: "{{vpc_data.vpc.id}}"
+       cidr: "{{item.CIDR}}"
+       tags:
+         Name: "{{item.TAG}}"
+     register: subnets_data
+     with_items: "{{ SUBNET_CIDR_BLOCKS }}"
+   - ansible.builtin.set_fact:
+       subnet: "{{subnets_data.results | selectattr('item.TAG', '==', 'web and app public subnet') }}"
+   - name: Create Internet gateway
+     amazon.aws.ec2_vpc_igw:
+      vpc_id: "{{vpc_data.vpc.id}}"
+      state: present
+      tags:
+        Name: KK_EC_APP_IGW
+     register: igw
+   - name: Get nat gateways with specific filter
+     amazon.aws.ec2_vpc_nat_gateway_info:
+       region: "{{REGION}}"
+       filters:
+         subnet-id: "{{ subnet[0].subnet.id }}"
+         state: ['available']
+     register: nat
+   - name: Create new nat gateway 
+     amazon.aws.ec2_vpc_nat_gateway:
+       state: present
+       wait: yes
+       subnet_id: "{{subnet[0].subnet.id}}"
+       region: "{{REGION}}"
+       tags:
+         Name: "KK_EC_APP_NATGW"
+     register: nat_gateway
+     when:  "nat.result[0].tags.Name is undefined"
+   - name: Set up public subnet route table
+     amazon.aws.ec2_vpc_route_table:
+       vpc_id: "{{vpc_data.vpc.id}}"
+       region: "{{ REGION }}"
+       tags:
+        Name: PUBLIC_KK_EC_APP_ROUTE_TABLE
+       subnets:
+         - "{{ subnet[0].subnet.id }}"
+       routes:
+         - dest: 0.0.0.0/0
+           gateway_id: "{{ igw.gateway_id }}"
+     register: public_route_table
+   - ansible.builtin.set_fact:
+       subnet_private: "{{subnets_data.results | selectattr('item.TAG', '==', 'database private subnet') }}"
+   - name: Set up private subnet route table
+     amazon.aws.ec2_vpc_route_table:
+       vpc_id: "{{vpc_data.vpc.id}}"
+       region: "{{ REGION }}"
+       tags:
+        Name: PRIVATE_KK_EC_APP_ROUTE_TABLE
+       subnets:
+         - "{{ subnet_private[0].subnet.id }}"
+       routes:
+         - dest: 0.0.0.0/0
+           gateway_id: "{{ nat_gateway.nat_gateway_id  }}"
+     register: private_route_table
+     when: "nat.result[0].tags.Name is undefined"
+   - name: Basion_host security gp
+     amazon.aws.ec2_security_group:
+      description: KK_EC_APP_SECURITY_GROUP_Basion_host
+      name: KK_EC_APP_SECURITY_GROUP_Basion_host
+      vpc_id: "{{vpc_data.vpc.id}}"
+      rules:
+      rules:
+        - proto: tcp
+          ports:
+            - "{{SSH_PORT}}"
+          cidr_ip: 0.0.0.0/0
+   - name: public secruity gp
+     amazon.aws.ec2_security_group:
+      description: KK_EC_APP_SECURITY_GROUP_WEB-APP
+      name: KK_EC_APP_SECURITY_GROUP_WEB_APP
+      vpc_id: "{{vpc_data.vpc.id}}"
+      rules:
+        - proto: tcp
+          ports:
+            - 80
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          ports:
+            - "{{SSH_PORT}}"
+          group_name: KK_EC_APP_SECURITY_GROUP_Basion_host
+   - name: private security gp
+     amazon.aws.ec2_security_group:
+      description: KK_EC_APP_SECURITY_GROUP_DataBase
+      name: KK_EC_APP_SECURITY_GROUP_DataBase
+      vpc_id: "{{vpc_data.vpc.id}}"
+      rules:
+        - proto: tcp
+          ports:
+            - "{{MYSQL_PORT}}"
+          group_name: KK_EC_APP_SECURITY_GROUP_WEB_APP
+        - proto: tcp
+          ports:
+            - "{{SSH_PORT}}"
+          group_name: KK_EC_APP_SECURITY_GROUP_Basion_host
+   - name: create a new EC2 key pair, returns generated private key
+     amazon.aws.ec2_key:
+       name: KK_EC_APP_Key_Pair
+       key_material: "{{ lookup('file', 'keys_dir/KK_EC_APP_Key.pub') }}"
+     delegate_to: localhost
+   - name: basion_host
+     amazon.aws.ec2_instance:
+      name: "BASION_HOST"
+      key_name: "KK_EC_APP_Key_Pair"
+      vpc_subnet_id: "{{subnet[0].subnet.id}}"
+      instance_type: "{{INSTANCE_TYPE}}"
+      security_group: KK_EC_APP_SECURITY_GROUP_Basion_host
+      network_interfaces:
+        - assign_public_ip: true
+      image_id: "{{AMI}}"
+     register: basion_host
+   - name: WEB-APP
+     amazon.aws.ec2_instance:
+      name: "WEB-APP"
+      key_name: "KK_EC_APP_Key_Pair"
+      vpc_subnet_id: "{{subnet[0].subnet.id}}"
+      instance_type: "{{INSTANCE_TYPE}}"
+      security_group: KK_EC_APP_SECURITY_GROUP_WEB_APP
+      image_id: "{{AMI}}"
+      network_interfaces:
+        - assign_public_ip: true
+      tags:
+         env: testing
+     register: web_app
+   - name: DataBase
+     amazon.aws.ec2_instance:
+      name: "Database"
+      key_name: "KK_EC_APP_Key_Pair"
+      vpc_subnet_id: "{{subnet_private[0].subnet.id}}"
+      instance_type: "{{INSTANCE_TYPE}}"
+      security_group: KK_EC_APP_SECURITY_GROUP_DataBase
+      image_id: "{{AMI}}"
+      tags: 
+        env: testing
+     register: Database
+   - debug:
+      msg: "Public Ip of Basion Host: {{ basion_host.instances[0].network_interfaces[0].association.public_ip }}"
+   - debug:
+      msg: Public_ip "{{web_app.instances[0].network_interfaces[0].association.public_ip}}", Private_ip "{{web_app.instances[0].network_interfaces[0].private_ip_address}}"
+   - debug:
+      msg: "Priate Ip of Database instance: {{Database.instances[0].network_interfaces[0].private_ip_address}}"
+   - lineinfile:
+       path: group_vars/tag_Name_Database.yml
+       line: "db_ip: {{Database.instances[0].network_interfaces[0].private_ip_address}}"
+   

@@ -1,0 +1,16 @@
+---
+# vars file for database
+
+mysql_port:  ""
+
+dbname:  ""
+
+dbuser:  ""
+
+dbpassword: ""
+
+mysqlservice: ""
+
+Web_App_ip: ""
+
+root_password: ""

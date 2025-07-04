@@ -1,0 +1,10 @@
+---
+# tasks file for common
+
+- name: Install common dependencies
+  yum:
+    name:
+      - python3-libselinux
+      - python3-libsemanage
+      - firewalld
+    state: installed

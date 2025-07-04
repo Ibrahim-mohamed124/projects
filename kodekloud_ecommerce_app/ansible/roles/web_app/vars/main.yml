@@ -1,0 +1,5 @@
+---
+# vars file for web_app
+httpd_port: 80
+
+repository: https://github.com/kodekloudhub/learning-app-ecommerce.git

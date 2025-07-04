@@ -1,0 +1,74 @@
+---
+- name: Install MariaDB package
+  yum:
+    name:
+      - mysql8.4-server
+      - pip
+    state: installed
+- name: Install python-mariadb drivers
+  pip:
+    name: "{{ item }}"
+    state: latest
+  loop:
+    - PyMySQL
+    - mysql-connector-python
+- name: Start MariaDB Service
+  service: 
+    name: mysqld
+    state: started 
+    enabled: yes
+
+- name: Start firewalld
+  service: 
+    name: firewalld 
+    state: started 
+    enabled: yes
+
+- name: insert firewalld rule
+  firewalld: 
+    port: "{{ mysql_port }}/tcp"
+    permanent: true 
+    state: enabled 
+    immediate: yes
+- name: Ensure mysql_native_password is enalbed
+  ansible.builtin.lineinfile:
+    path: /etc/my.cnf.d/mysql-server.cnf
+    insertafter: '^[mysqld]'
+    line: 'mysql_native_password=ON'
+  notify: mysqld
+- name: Flush handlers
+  meta: flush_handlers
+- name: Set MySQL root password
+  mysql_user:
+    name: root
+    host: localhost
+    password: "{{root_password }}"
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    plugin: mysql_native_password
+- name: Create Mysql configuration file
+  template: 
+    src: templates/my.cnf.j2 
+    dest: /root/.my.cnf
+- name: Create Application Database
+  mysql_db: 
+    name: "{{ dbname }}" 
+    state: present
+  ignore_errors: yes
+
+- name: Create Application DB User
+  mysql_user: 
+    name: "{{ dbuser }}" 
+    password: "{{ dbpassword }}" 
+    priv: "*.*:ALL"
+    host: "{{ Web_App_ip }}" 
+    state: present
+  ignore_errors: yes
+
+- name: Move db-load-script to db host
+  copy:
+    src: files/db-load-script.sql
+    dest: /tmp/db-load-script.sql
+
+- name: Load Inventory Data
+  shell: mysql -f < /tmp/db-load-script.sql
+

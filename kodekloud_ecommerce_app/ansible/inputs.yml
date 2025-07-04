@@ -1,0 +1,11 @@
+REGION: ""
+VPC_CIDR_BLOCK: ""
+SUBNET_CIDR_BLOCKS:
+ - CIDR: ""
+   TAG: "web and app public subnet"
+ - CIDR: ""
+   TAG: "database private subnet"
+AMI: ""
+SSH_PORT: ""
+MYSQL_PORT: ""
+INSTANCE_TYPE: ""
