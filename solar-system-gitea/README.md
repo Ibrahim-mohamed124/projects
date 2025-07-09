@@ -6,7 +6,7 @@ Required infrastrcutre
     docker
     trivy cli
     java-21
-    aws cli
+    aws cli 
     git
 3- SonarQube server with the desired quality gate
 4- Gitea server
