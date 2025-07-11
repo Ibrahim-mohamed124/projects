@@ -21,8 +21,8 @@
     "serverless-http": "^3.2.0"
   },
   "devDependencies": {
-    "chai": "*",
-    "chai-http": "*",
+    "chai": "4.3.6",
+    "chai-http": "4.3.0",
     "mocha": "*",
     "mocha-junit-reporter": "^2.2.1"
   }
