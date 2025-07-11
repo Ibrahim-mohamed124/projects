@@ -111,7 +111,7 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_instance" "web" {
-  ami                         = "ami-0e40cbc388241f8ce"
+  ami                         = data.aws_ami.ubuntu
   key_name                    = "test"
   instance_type               = "t3.micro"
   count                       = 2
