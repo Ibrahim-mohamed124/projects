@@ -52,5 +52,5 @@ This setup assumes the following components are provisioned and accessible:
 
 | Tool Name                  | Description                                |
 |---------------------------|--------------------------------------------|
-| Node.js                   | For running JavaScript-based components    |
+| Node.js v18.20.8          | For running JavaScript-based components    |
 | SonarQube
